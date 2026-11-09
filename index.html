@@ -1,0 +1,119 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bisect Sag Adjustment Calculator</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:Arial,sans-serif;background:#edf2f7;color:#193247;margin:0}
+header{background:#123047;color:white;padding:22px 16px;text-align:center}
+h1{font-size:24px;margin:0}
+header p{font-size:13px;color:#d8e7f0}
+main{max-width:850px;margin:auto;padding:15px}
+section{background:white;border-radius:12px;padding:18px;margin-bottom:15px;box-shadow:0 2px 8px #0001}
+h2{font-size:19px;margin:0 0 15px}
+label{display:block;font-weight:bold;margin:12px 0 5px}
+input{width:100%;padding:12px;font-size:17px;border:1px solid #aebfc9;border-radius:7px}
+button{width:100%;padding:16px;background:#0879b9;color:white;border:0;border-radius:8px;font-size:17px;font-weight:bold;margin-top:20px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.hidden{display:none}
+.result{background:#e7f4fc;padding:12px;border-radius:8px;margin:8px 0}
+.result strong{display:block;font-size:21px;margin-top:5px}
+svg{width:100%;height:auto;background:#f9fcff;border:1px solid #dae5ee;border-radius:8px}
+table{width:100%;border-collapse:collapse;margin-bottom:18px}
+td{padding:11px 7px;border-bottom:1px solid #e1e7ed}
+td:last-child{text-align:right}
+.note{font-size:13px;color:#596c79;line-height:1.5}
+#error{color:#b4232d;margin-top:10px}
+@media(max-width:550px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+<h1>Bisect Sag Adjustment Calculator</h1>
+<p>Structure movement along the angle bisector</p>
+</header>
+<main>
+<section>
+<h2>Span and Structure Inputs</h2>
+<div class="grid">
+<div><label for="ahead">Ahead Span Length (ft)</label><input id="ahead" type="number" value="1000" step="any"></div>
+<div><label for="back">Back Span Length (ft)</label><input id="back" type="number" value="800" step="any"></div>
+<div><label for="angle">Line Deflection (degrees)</label><input id="angle" type="number" value="45" step="any"></div>
+<div><label for="offset">Structure Offset (ft)</label><input id="offset" type="number" value="-5" step="any"></div>
+</div>
+<button type="button" id="calc">Calculate Sag Adjustment</button>
+<div id="error"></div>
+</section>
+
+<div id="results" class="hidden">
+<section>
+<h2>Calculated Length Changes</h2>
+<div class="result">Ahead Span Change<strong id="aheadChange"></strong></div>
+<div class="result">Back Span Change<strong id="backChange"></strong></div>
+<div class="result">Combined Length Change<strong id="totalChange"></strong></div>
+</section>
+<section>
+<h2>Scaled Geometry Diagram</h2>
+<svg id="drawing" viewBox="0 0 760 440"></svg>
+<p class="note">Blue dashed lines: original spans. Orange solid lines: adjusted spans. Endpoints remain fixed.</p>
+</section>
+<section>
+<h2>Ahead Span</h2>
+<table id="aheadTable"></table>
+<h2>Back Span</h2>
+<table id="backTable"></table>
+<p class="note">This calculator determines geometric span-length differences. It does not directly calculate conductor sag, tension, or final sagging corrections. Verify results against engineering requirements.</p>
+</section>
+</div>
+</main>
+<script>
+(function(){
+"use strict";
+function el(id){return document.getElementById(id)}
+function fmt(n){return n.toLocaleString("en-US",{minimumFractionDigits:3,maximumFractionDigits:3})}
+function change(n){return (n>=0?"+":"")+fmt(n)+" ft"}
+function row(a,b){return "<tr><td>"+a+"</td><td>"+b+"</td></tr>"}
+function drawLine(a,b,c,d,color,dashed){
+return '<line x1="'+a+'" y1="'+b+'" x2="'+c+'" y2="'+d+'" stroke="'+color+'" stroke-width="3" '+(dashed?'stroke-dasharray="8 6"':'')+'/>';
+}
+function dot(p,color){return '<circle cx="'+p[0]+'" cy="'+p[1]+'" r="7" fill="'+color+'" stroke="white" stroke-width="2"/>'}
+function label(p,t,dy){return '<text x="'+p[0]+'" y="'+(p[1]+dy)+'" text-anchor="middle" font-size="14" font-weight="bold" fill="#17374c">'+t+'</text>'}
+function calculate(){
+var a=Number(el("ahead").value),b=Number(el("back").value),ang=Number(el("angle").value),d=Number(el("offset").value);
+if([a,b,ang,d].some(x=>!Number.isFinite(x))||a<=0||b<=0||ang<0||ang>=180||["ahead","back","angle","offset"].some(x=>el(x).value==="")){
+el("error").textContent="Enter positive span lengths, a deflection from 0 to less than 180 degrees, and a signed offset.";
+el("results").classList.add("hidden");return;
+}
+el("error").textContent="";
+var half=(180-ang)*Math.PI/360,c=Math.cos(half),s=Math.sin(half);
+var ahead=[a*c,a*s],back=[b*c,-b*s],old=[0,0],moved=[d,0];
+var newA=Math.hypot(ahead[0]-d,ahead[1]),newB=Math.hypot(back[0]-d,back[1]);
+el("aheadChange").textContent=change(newA-a);
+el("backChange").textContent=change(newB-b);
+el("totalChange").textContent=change(newA+newB-a-b);
+el("aheadTable").innerHTML=row("Original Length",fmt(a)+" ft")+row("Adjusted Length",fmt(newA)+" ft")+row("<b>Change in Length</b>","<b>"+change(newA-a)+"</b>");
+el("backTable").innerHTML=row("Original Length",fmt(b)+" ft")+row("Adjusted Length",fmt(newB)+" ft")+row("<b>Change in Length</b>","<b>"+change(newB-b)+"</b>");
+var pts=[old,moved,ahead,back],xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
+var minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+var scale=Math.min(620/Math.max(maxX-minX,1),320/Math.max(maxY-minY,1));
+var midX=(minX+maxX)/2,midY=(minY+maxY)/2;
+function project(p){return [380+(p[0]-midX)*scale,220-(p[1]-midY)*scale]}
+var o=project(old),m=project(moved),ap=project(ahead),bp=project(back);
+var svg=drawLine(o[0],o[1],ap[0],ap[1],"#1479b8",true)+drawLine(o[0],o[1],bp[0],bp[1],"#1479b8",true);
+svg+=drawLine(m[0],m[1],ap[0],ap[1],"#df792b",false)+drawLine(m[0],m[1],bp[0],bp[1],"#df792b",false);
+svg+=drawLine(o[0],o[1],m[0],m[1],"#61717c",true);
+svg+=dot(ap,"#18374a")+dot(bp,"#18374a")+dot(o,"#1479b8")+dot(m,"#df792b");
+svg+=label(ap,"Ahead Endpoint",-15)+label(bp,"Back Endpoint",24)+label(o,"Original",-18)+label(m,"Moved",25);
+svg+='<text x="380" y="25" text-anchor="middle" font-size="15" fill="#17374c">Ahead: '+fmt(a)+' → '+fmt(newA)+' ft</text>';
+svg+='<text x="380" y="425" text-anchor="middle" font-size="15" fill="#17374c">Back: '+fmt(b)+' → '+fmt(newB)+' ft</text>';
+el("drawing").innerHTML=svg;
+el("results").classList.remove("hidden");
+}
+el("calc").addEventListener("click",calculate);
+})();
+</script>
+</body>
+</html>
